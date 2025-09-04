@@ -1,0 +1,282 @@
+\documentclass[12pt, a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+
+% Configuración de la página
+\geometry{a4paper, margin=1in}
+
+% Configuración de colores para los listados de código
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+% Estilos para los listados de código
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2
+}
+\lstset{style=mystyle}
+
+% Encabezado y pie de página
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{Informe de Proyecto: Aplicación "Postits"}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+
+% --- Documento ---
+\begin{document}
+
+\begin{titlepage}
+    \centering
+    \vspace*{1cm}
+    \Huge\textbf{Informe de Proyecto: Aplicación ``Postits'' con Arquitectura de 3 Contenedores Docker}
+    
+    \vspace{1.5cm}
+    \Large\textbf{Tarea de Despliegue de Aplicaciones}
+    
+    \vspace{2cm}
+    
+    \vfill
+    
+    \large
+    \textbf{Mark Romero Guillen} \\
+    \textbf{Arequipa, Perú}
+    
+    \vspace{1cm}
+    \large
+    \today
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+\section{Introducción}
+El presente informe detalla la configuración y despliegue de una aplicación web simple denominada "Postits". El objetivo principal de este proyecto es demostrar la implementación de una arquitectura de tres capas (frontend, backend, base de datos) utilizando contenedores Docker, orquestados mediante Docker Compose.
+
+La aplicación permite a los usuarios crear, visualizar y eliminar notas de texto (o "postits") que se persisten en una base de datos. El desarrollo y la ejecución se realizaron en un entorno Pop!\_OS con Docker Desktop.
+
+\section{Arquitectura General}
+La aplicación sigue un patrón de arquitectura de tres niveles, donde cada nivel es un servicio independiente encapsulado en su propio contenedor Docker.
+
+\begin{enumerate}
+    \item \textbf{Frontend:} Es la capa de presentación, responsable de la interfaz de usuario (UI). Se trata de una página web estática (HTML, CSS, JavaScript) que interactúa con el backend a través de peticiones HTTP (API REST).
+    \item \textbf{Backend (API):} Es la capa de lógica de negocio. Expone una API RESTful que el frontend consume. Se encarga de procesar las peticiones, aplicar la lógica de la aplicación y comunicarse con la base de datos para almacenar o recuperar datos.
+    \item \textbf{Base de Datos:} Es la capa de persistencia. Su única función es almacenar los datos de la aplicación de forma segura y duradera.
+\end{enumerate}
+
+La comunicación entre los contenedores se gestiona a través de una red privada virtual creada por Docker Compose, lo que permite que los servicios se comuniquen entre sí utilizando sus nombres de servicio como si fueran nombres de host.
+
+\begin{figure}[h]
+    \centering
+    % Diagrama simple con texto
+    \fbox{
+        \begin{tabular}{c}
+             \textbf{Usuario (Navegador Web)} \\
+             $\downarrow$ HTTP en puerto 3000 \\
+             \textbf{Contenedor Frontend (Nginx)} \\
+             Sirve \texttt{index.html} \\
+             $\downarrow$ Peticiones API a puerto 8000 \\
+             \textbf{Contenedor Backend (FastAPI)} \\
+             Lógica de negocio \\
+             $\downarrow$ Conexión SQL a puerto 5432 \\
+             \textbf{Contenedor Base de Datos (PostgreSQL)} \\
+             Persistencia de datos
+        \end{tabular}
+    }
+    \caption{Flujo de comunicación en la arquitectura de 3 niveles.}
+\end{figure}
+
+\section{Análisis de Componentes}
+
+\subsection{Frontend}
+\begin{itemize}
+    \item \textbf{Tecnología:} HTML5, CSS3 y JavaScript puro (vanilla JS).
+    \item \textbf{Servidor Web:} Nginx (versión Alpine para un tamaño de imagen mínimo).
+    \item \textbf{Función:} Proporciona la interfaz gráfica para que el usuario interactúe con la aplicación. El código JavaScript realiza llamadas \texttt{fetch} al servicio backend para obtener, crear y eliminar posts.
+\end{itemize}
+
+El \texttt{Dockerfile} para el frontend es extremadamente simple. Su única tarea es copiar el archivo estático \texttt{index.html} en el directorio raíz del servidor Nginx.
+
+\begin{lstlisting}[language=bash, caption={Dockerfile del Frontend}]
+# Imagen muy pequena para estaticos
+FROM nginx:alpine
+COPY index.html /usr/share/nginx/html/index.html
+# nginx expone 80 por defecto
+\end{lstlisting}
+
+\subsection{Backend (API)}
+\begin{itemize}
+    \item \textbf{Tecnología:} Python 3.12 con el framework FastAPI.
+    \item \textbf{Servidor ASGI:} Uvicorn.
+    \item \textbf{Conexión a BD:} \texttt{psycopg}, el driver moderno para PostgreSQL en Python.
+    \item \textbf{Función:} Expone los siguientes endpoints para gestionar los posts:
+    \begin{itemize}
+        \item \texttt{GET /posts}: Lista todos los posts.
+        \item \texttt{POST /posts}: Crea un nuevo post.
+        \item \texttt{DELETE /posts/\{id\}}: Elimina un post específico.
+        \item \texttt{GET /healthz}: Endpoint de chequeo de salud.
+    \end{itemize}
+\end{itemize}
+
+El código Python incluye una función \texttt{wait\_for\_db} que realiza una espera activa, intentando conectarse a la base de datos en un bucle antes de iniciar el pool de conexiones. Esto es crucial en un entorno de contenedores para evitar que la API falle si se inicia antes de que la base de datos esté completamente lista.
+
+El \texttt{Dockerfile} del backend utiliza una imagen base de Python Alpine para mantener un tamaño reducido. Instala las dependencias de \texttt{requirements.txt} y luego ejecuta la aplicación con Uvicorn.
+
+\begin{lstlisting}[language=bash, caption={Dockerfile del Backend}]
+# Imagen pequena, sin apt-get
+FROM python:3.12-alpine
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# Instalar deps Python (todas en wheel/binario)
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+# Copiar codigo
+COPY app.py .
+
+# Variables por defecto (puedes sobreescribir en compose)
+ENV PORT=8000
+EXPOSE 8000
+
+# Arranque del servidor ASGI
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+\end{lstlisting}
+
+\subsection{Base de Datos}
+\begin{itemize}
+    \item \textbf{Tecnología:} PostgreSQL 16 (versión Alpine).
+    \item \textbf{Persistencia:} Se utiliza un \textbf{volumen de Docker} llamado \texttt{db\_data}. Este volumen mapea el directorio de datos de PostgreSQL dentro del contenedor (\texttt{/var/lib/postgresql/data}) a un espacio de almacenamiento gestionado por Docker en el host. Esto garantiza que los datos no se pierdan si el contenedor se detiene o se elimina.
+\end{itemize}
+
+
+\section{Orquestación con Docker Compose}
+El archivo \texttt{docker-compose.yml} es el núcleo de la orquestación. Define los tres servicios (\texttt{db}, \texttt{api}, \texttt{frontend}), sus configuraciones, y cómo se relacionan entre sí.
+
+\begin{lstlisting}[language=yaml, caption={Fragmento de docker-compose.yml}]
+version: "3.8"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: postits
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postits"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # ...
+
+  api:
+    build:
+      context: ./backend
+    environment:
+      DATABASE_URL: postgresql://postgres:password@db:5432/postits
+    depends_on:
+      db:
+        condition: service_healthy
+    # ...
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+    # ...
+
+volumes:
+  db_data:
+\end{lstlisting}
+
+\subsection{Interacción y Dependencias}
+La interacción entre contenedores se logra mediante características clave de Docker Compose:
+
+\begin{itemize}
+    \item \textbf{Red Interna:} Docker Compose crea una red por defecto para el proyecto. Todos los servicios dentro de esta red pueden comunicarse entre sí usando su nombre de servicio como si fuera un DNS. Por ejemplo, el servicio \texttt{api} se conecta a la base de datos en la URL \texttt{postgresql://...@db:5432}, donde \texttt{db} es el nombre del servicio de la base de datos.
+    
+    \item \textbf{Control de Arranque con \texttt{depends\_on} y \texttt{healthcheck}:}
+    El servicio \texttt{api} tiene una dependencia explícita del servicio \texttt{db}. La condición \texttt{service\_healthy} le indica a Docker Compose que no debe iniciar el contenedor \texttt{api} hasta que el \texttt{healthcheck} del contenedor \texttt{db} sea exitoso.
+    El \texttt{healthcheck} del servicio \texttt{db} utiliza el comando \texttt{pg\_isready} para verificar que PostgreSQL no solo esté en ejecución, sino que también esté listo para aceptar conexiones. Esto previene errores de conexión al iniciar la pila de servicios.
+    
+    \item \textbf{Mapeo de Puertos:}
+    \begin{itemize}
+        \item El Frontend (\texttt{frontend}) mapea el puerto 3000 del host al puerto 80 del contenedor Nginx. El usuario accede a la aplicación a través de \href{http://localhost:3000}{http://localhost:3000}.
+        \item El Backend (\texttt{api}) mapea el puerto 8000 del host al 8000 del contenedor. Esto permite que el JavaScript del frontend (ejecutándose en el navegador del usuario) pueda hacer peticiones a \href{http://localhost:8000}{http://localhost:8000}.
+        \item La Base de Datos (\texttt{db}) mapea el puerto 5432 para permitir la conexión directa desde el host con herramientas de gestión de bases de datos si fuera necesario para depuración.
+    \end{itemize}
+\end{itemize}
+
+
+\section{Configuración y Ejecución}
+Para ejecutar este proyecto, se deben seguir los siguientes pasos:
+
+\begin{enumerate}
+    \item \textbf{Prerrequisitos:} Tener instalado Docker y Docker Compose (Docker Desktop en Pop!\_OS los incluye a ambos).
+    \item \textbf{Estructura de Archivos:} Organizar los archivos en la siguiente estructura:
+    \begin{verbatim}
+    .
+    |-- docker-compose.yml
+    |-- backend/
+    |   |-- Dockerfile
+    |   |-- app.py
+    |   |-- requirements.txt
+    |-- frontend/
+        |-- Dockerfile
+        |-- index.html
+    \end{verbatim}
+    \item \textbf{Levantar los Servicios:} Abrir una terminal en el directorio raíz del proyecto y ejecutar el siguiente comando:
+    \begin{lstlisting}[language=bash, numbers=none]
+docker-compose up --build
+    \end{lstlisting}
+    El flag \texttt{--build} asegura que las imágenes de los contenedores se construyan a partir de los \texttt{Dockerfile} la primera vez o si han sufrido cambios.
+    \item \textbf{Acceder a la Aplicación:} Una vez que todos los contenedores estén en funcionamiento, se puede acceder a la interfaz de la aplicación abriendo un navegador web en la dirección \href{http://localhost:3000}{http://localhost:3000}.
+\end{enumerate}
+
+\section{Conclusión}
+Este proyecto demuestra de manera efectiva la creación y orquestación de una aplicación web moderna de tres capas utilizando Docker y Docker Compose. La separación de responsabilidades en contenedores independientes (frontend, backend, base de datos) facilita el desarrollo, el despliegue y el mantenimiento.
+
+Aspectos clave como la comunicación en red interna, el control del orden de arranque con \texttt{healthchecks}, y la persistencia de datos mediante volúmenes han sido implementados correctamente, resultando en una arquitectura robusta y escalable, lista para entornos de desarrollo y producción.
+
+\section{Código Fuente}
+El código fuente completo de este proyecto, incluyendo los archivos \texttt{Dockerfile}, el código de la aplicación y el archivo \texttt{docker-compose.yml}, está disponible en el siguiente repositorio de GitHub:
+\begin{center}
+    \href{https://github.com/marcksdbgg/notas_contenedores}{github.com/marcksdbgg/notas\_contenedores}
+\end{center}
+
+\end{document}

@@ -1,10 +1,19 @@
-# Ejemplo simple de contenedores
+# Aplicación de Notas con Docker
 
-Aplicación simple compuesta por un frontend basico en html, un bakcend en python y una base
-de datos en PostgreSQL
+Aplicación simple compuesta por un frontend en HTML, un backend en Python (FastAPI) y una base de datos PostgreSQL, todo orquestado con Docker Compose.
 
-La idea es que todos estos esten correctamente contenerizados y que funcionen correctamente entre ellos. 
+## Cómo ejecutar
 
-### El sistema
+1.  **Prerrequisitos:**
+    *   Tener instalado Docker y Docker Compose (Docker Desktop es una buena opción).
 
-El sistema es PopOs usando DockerDesktop
+2.  **Levantar los servicios:**
+    Abre una terminal en la raíz del proyecto y ejecuta:
+    ```bash
+    docker-compose up --build
+    ```
+    Este comando construirá las imágenes y levantará los tres contenedores.
+
+3.  **Probar la aplicación:**
+    *   **Frontend:** Abre tu navegador y ve a `http://localhost:3000`.
+    *   **Backend API:** Puedes acceder a la documentación de la API en `http://localhost:8000/docs`.
