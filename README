@@ -1,0 +1,10 @@
+# Ejemplo simple de contenedores
+
+Aplicación simple compuesta por un frontend basico en html, un bakcend en python y una base
+de datos en PostgreSQL
+
+La idea es que todos estos esten correctamente contenerizados y que funcionen correctamente entre ellos. 
+
+### El sistema
+
+El sistema es PopOs usando DockerDesktop
